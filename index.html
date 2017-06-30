@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+		<meta content="utf8" http-equiv="encoding">
+	</head>
+	<body>
+		<canvas id="gameCanvas" width="800" height="600"></canvas>
+		<script type="text/javascript">
+			//Constantes
+			const BORDER = 10;
+			const SPACE = 50;
+			const FIRE_RATE_BASE = 10;
+			const BULLET_SPEED = 10;
+			//Del jugador
+			const PLAYER_W = 40;
+			const PLAYER_H = 20;
+
+			//Variables del canvas
+			var canvas;
+			var canvasContext;
+
+			//Variables del jugador
+			var playerPosX;
+			var playerPosY;
+			var playerSpeed = 10;
+			var fireRate = 0;
+
+			//Para los proyectiles en pantalla
+			var projectileList = [];
+
+			//Para los enemigos
+			var enemiesFila = 5;
+			var enemiesColumnas = 11;
+			var enemyMatrix = [];
+			var enemiesLeft;
+			var generalVel = 10;
+			var enemiesInterval = 1000;
+
+			//Variables para las acciones con las teclas
+			var moveLeft = false;
+			var moveRight = false;
+			var shoot = false;
+
+			//Creo la clase para el proyectil
+			function ProjectileClass()
+			{
+				//Defino variables
+				this.width = 5;
+				this.height = 10;
+				this.x;
+				this.y;
+				this.vel;
+				this.color = "yellow";
+				this.destroy = false;
+
+				this.move = function()
+				{
+					this.y += this.vel;
+					//Si supero la parte superior de la pantalla lo mando a destruir
+					if (this.y <= 0)
+					{
+						this.destroy = true;
+					}
+				}
+
+				this.draw = function()
+				{
+					CreateRect(this.x, this.y, this.width, this.height, this.color);
+				}
+			}
+			//Final de la clase para el proyectil
+
+			//Creo la clase para los enemigos
+			function EnemyClass()
+			{
+				//Defino variables
+				this.width = 40;
+				this.height = 20;
+				this.x;
+				this.y;
+				this.velX;
+				this.velY = 0;
+				this.color = "red";
+				this.destroyed = false;
+
+				this.draw = function()
+				{
+					CreateRect(this.x, this.y, this.width, this.height, this.color);
+				}
+
+				this.move = function()
+				{
+					this.x += this.velX;
+					this.y += this.velY;
+					this.velY = 0;
+					this.velX = generalVel;
+				}
+			}
+
+			window.onload = function()
+			{
+				canvas = document.getElementById("gameCanvas");
+				canvasContext = canvas.getContext("2d");
+
+				//Inicializo la cantidad de enemigos
+				enemiesLeft = enemiesColumnas*enemiesFila;
+
+				//Creo la matriz de enemigos
+				var b=0
+				for (var i=0; i<enemiesColumnas; i++)
+				{
+					enemyMatrix[i] = [];
+					for (var j=0; j<enemiesFila; j++)
+					{
+						b++;
+						var newEnemy = new EnemyClass();
+						newEnemy.x = 1.5*newEnemy.width*i+BORDER;
+						newEnemy.y = 1.5*newEnemy.height*j+BORDER;
+						newEnemy.velX = generalVel;
+						enemyMatrix[i][j] = newEnemy;
+						enemyMatrix[i][j].draw();
+						canvasContext.fillText(b,enemyMatrix[i][j].x,enemyMatrix[i][j].y);
+					}
+				}
+
+				//Añado el listener para cuando se presiona una tecla y se deja de presionar una tecla
+				document.addEventListener("keydown", KeyPressed);
+				document.addEventListener("keyup", OnKeyUp);
+
+				//Inicializo la posicion del jugador en la mitad inferior de la pantalla
+				playerPosX = canvas.width/2 - PLAYER_W;
+				playerPosY = canvas.height - PLAYER_H - BORDER;
+				var framesPerSecond = 30;
+				setInterval(Update, 1000/framesPerSecond);
+			}
+
+			//Creo mi funcion update
+			function Update()
+			{
+				//Dibujo al pantalla del juego
+				DrawAll();
+				if (enemiesLeft==0)
+				{
+					return;
+				}
+				//Muevo los elementos
+				MoveAll();
+				//Reviso al jugador y que quiere hacer, incluye movimiento y disparo
+				PlayerController();
+				//Reviso el controlador de los enemigos
+				EnemyController();
+				//Reviso si debo destruir algun proyectil
+				for (var i=projectileList.length-1; i>=0; i--)
+				{
+					if (projectileList[i].destroy)
+					{
+						projectileList.splice(i, 1); //Funcion que remuve un elemento de una lista y la re-arregla
+					}
+				}
+				//Reviso las coliciones
+				Collitions();
+			}
+
+			//Funcion para dibujar
+			function DrawAll()
+			{
+				//Creo el fondo y refresco la pantalla
+				CreateRect(0,0,canvas.width,canvas.height,"black");
+
+				//Dibujo los proyectiles
+				for (var i=0; i<projectileList.length; i++)
+				{
+					projectileList[i].draw();
+				}
+				//Creo al jugador
+				CreateRect(playerPosX, playerPosY, PLAYER_W, PLAYER_H, "green");
+
+				//Dibujo a los enemigos
+				var b = 0;
+				for (var i=0; i<enemyMatrix.length; i++)
+				{
+					//Para ver si se elimino la columna completa
+					var enemigosEnColumna = false;
+					//for (var i=0; i<enemiesFila; i++)
+					for (var j=0; j<enemyMatrix[i].length; j++)
+					{
+						b++;
+						//Reviso si no los han destruido
+						if (!enemyMatrix[i][j].destroyed)
+						{
+							canvasContext.fillText(b,enemyMatrix[i][j].x,enemyMatrix[i][j].y);
+							enemyMatrix[i][j].draw();
+							enemigosEnColumna = true;
+						}
+						canvasContext.fillText(b,enemyMatrix[i][j].x,enemyMatrix[i][j].y);
+					}
+
+					if (!enemigosEnColumna)
+					{
+						enemyMatrix.splice(i,1);
+					}
+				}
+			}
+
+			//Funcion para mover los elementos
+			function MoveAll()
+			{
+				//Muevo los proyectiles
+				for (var i=0; i<projectileList.length; i++)
+				{
+					projectileList[i].move();
+				}
+			}
+
+			//Funcion que crea rectangulos
+			function CreateRect(topLeftX, topLeftY, width, height, color)
+			{
+				//Coloco el color
+				canvasContext.fillStyle = color;
+				canvasContext.fillRect(topLeftX, topLeftY, width, height);
+			}
+
+			//Controllador del jugador
+			function PlayerController()
+			{
+				//Movimiento de la nave
+				//Si se mueve a la izquierda (Verifico si puede)
+				if ((moveLeft) && (playerPosX > BORDER))
+				{
+					playerPosX -= playerSpeed;
+				}//Si se mueve a la derecha (Verifico si puede)
+				else if ((moveRight) && (playerPosX < (canvas.width - PLAYER_W - BORDER)))
+				{
+					playerPosX += playerSpeed;
+				}
+
+				//Reviso esta disparando
+				if (shoot && fireRate <= 0)
+				{
+					//Creo el proyectil
+					var newProjectile = new ProjectileClass();
+					newProjectile.x = playerPosX+(PLAYER_W/2);
+					newProjectile.y = playerPosY;
+					newProjectile.vel = -BULLET_SPEED;
+					projectileList.push(newProjectile);
+
+					//Coloco el fireRate
+					fireRate = FIRE_RATE_BASE;
+				}
+				else
+				{
+					fireRate--;
+				}
+			}
+
+			//Para controlar a todos los enemigos
+			function EnemyController()
+			{
+
+			}
+			function MoveEnemies()
+			{
+				console.log("muevo");
+				//Muevo los enemigos
+				//for (var i=0; i<enemiesFila; i++)
+				for (var i=0; i<enemyMatrix.length; i++)
+				{
+					for (var j=0; j<enemyMatrix[i].length; j++)
+					{
+						enemyMatrix[i][j].move();
+					}
+				}
+				//Reviso si esta lo mas a la izquierda
+				if (enemyMatrix[0][0].x <= BORDER)
+				{
+					generalVel *= -1;
+					GoDown();
+				}//Reviso si esta lo mas a la derecha
+				else if (enemyMatrix[enemyMatrix.length-1][enemyMatrix[0].length-1].x >= canvas.width - (BORDER + enemyMatrix[0][0].width))
+				{
+					generalVel *= -1;
+					GoDown();
+				}
+				SetEnemiesVel(generalVel);
+				setTimeout(MoveEnemies, enemiesInterval);
+			}
+			setTimeout(MoveEnemies, enemiesInterval);
+
+			//Para colocarle la misma velocidad a todos los enemigos
+			function SetEnemiesVel(vel)
+			{
+				//for (var i=0; i<enemiesFila; i++)
+				for (var i=0; i<enemyMatrix.length; i++)
+				{
+					for (var j=0; j<enemyMatrix[i].length; j++)
+					{
+						enemyMatrix[i][j].velX = vel;
+					}
+				}
+			}
+
+			function GoDown()
+			{
+				//for (var i=0; i<enemiesFila; i++)
+				for (var i=0; i<enemyMatrix.length; i++)
+				{
+					for (var j=0; j<enemyMatrix[i].length; j++)
+					{
+						enemyMatrix[i][j].velY = enemyMatrix[i][j].height;
+						enemyMatrix[i][j].velX = 0;
+					}
+				}	
+			}
+
+			//Para revisar coliciones
+			function Collitions()
+			{
+				//Realizo el ciclo sobre los disparos y lego sobre los enemigos para revisarlos a todos
+				for (var k=0; k<projectileList.length; k++)
+				{
+					//for (var i=0; i<enemiesFila; i++)
+					for (var i=0; i<enemyMatrix.length; i++)
+					{
+						for (var j=0; j<enemyMatrix[i].length; j++)
+						{
+							//Verificacion de colicion
+							if (!enemyMatrix[i][j].destroyed && (projectileList[k].x + projectileList[k].width >= enemyMatrix[i][j].x) && (projectileList[k].x <= enemyMatrix[i][j].x + enemyMatrix[i][j].width) && (projectileList[k].y <= enemyMatrix[i][j].y + enemyMatrix[i][j].height) && (projectileList[k].y + projectileList[k].height >= enemyMatrix[i][j].y))
+							{
+								projectileList[k].destroy = true;
+								enemyMatrix[i][j].destroyed = true;
+								enemiesLeft--;
+								enemiesInterval -= 100;
+							}
+						}
+					}
+				}
+			}
+
+			//Para cuando se presiona una tecla
+			function KeyPressed(e)
+			{
+				//Reviso si el jugador quiere mover la nave
+				//Si se mueve a la izquierda
+				if (e.keyCode == 37)
+				{
+					moveLeft = true;
+				}//Si se mueve a la derecha
+				else if (e.keyCode == 39)
+				{
+					moveRight = true;
+				}
+				//Reviso si el jugador quiere disparar
+				if (e.keyCode == 32 && fireRate <= 0)
+				{
+					shoot = true;
+				}
+			}
+
+			//Para cuando deja de presionar una teclja
+			function OnKeyUp(e)
+			{
+				//Movimiento de la nave
+				//Si se mueve a la izquierda (Verifico si puede)
+				if (e.keyCode == 37)
+				{
+					moveLeft = false;
+				}//Si se mueve a la derecha (Verifico si puede)
+				else if (e.keyCode == 39)
+				{
+					moveRight = false;
+				}
+				if (e.keyCode == 32)
+				{
+					shoot = false;
+				}
+			}
+		</script>
+	</body>
+</html>
